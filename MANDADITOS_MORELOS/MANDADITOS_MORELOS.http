@@ -1,0 +1,6 @@
+@MANDADITOS_MORELOS_HostAddress = http://localhost:5202
+
+GET {{MANDADITOS_MORELOS_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
