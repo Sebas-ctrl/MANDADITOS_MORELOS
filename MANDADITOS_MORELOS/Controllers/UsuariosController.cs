@@ -24,14 +24,14 @@ namespace MANDADITOS_MORELOS.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<UsuariosModel>>> GetUsuarios()
         {
-            return await _context.Usuarios.ToListAsync();
+            return await _context.Personas.ToListAsync();
         }
 
         // GET: api/Usuarios/5
         [HttpGet("{id}")]
         public async Task<ActionResult<UsuariosModel>> GetUsuariosModel(int id)
         {
-            var usuariosModel = await _context.Usuarios.FindAsync(id);
+            var usuariosModel = await _context.Personas.FindAsync(id);
 
             if (usuariosModel == null)
             {
@@ -46,7 +46,7 @@ namespace MANDADITOS_MORELOS.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> PutUsuariosModel(int id, UsuariosModel usuariosModel)
         {
-            if (id != usuariosModel.ID)
+            if (id != usuariosModel.PersonaID)
             {
                 return BadRequest();
             }
@@ -77,23 +77,23 @@ namespace MANDADITOS_MORELOS.Controllers
         [HttpPost]
         public async Task<ActionResult<UsuariosModel>> PostUsuariosModel(UsuariosModel usuariosModel)
         {
-            _context.Usuarios.Add(usuariosModel);
+            _context.Personas.Add(usuariosModel);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(PostUsuariosModel), new { id = usuariosModel.ID }, usuariosModel);
+            return CreatedAtAction(nameof(PostUsuariosModel), new { id = usuariosModel.PersonaID }, usuariosModel);
         }
 
         // DELETE: api/Usuarios/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUsuariosModel(int id)
         {
-            var usuariosModel = await _context.Usuarios.FindAsync(id);
+            var usuariosModel = await _context.Personas.FindAsync(id);
             if (usuariosModel == null)
             {
                 return NotFound();
             }
 
-            _context.Usuarios.Remove(usuariosModel);
+            _context.Personas.Remove(usuariosModel);
             await _context.SaveChangesAsync();
 
             return NoContent();
@@ -101,7 +101,7 @@ namespace MANDADITOS_MORELOS.Controllers
 
         private bool UsuariosModelExists(int id)
         {
-            return _context.Usuarios.Any(e => e.ID == id);
+            return _context.Personas.Any(e => e.PersonaID == id);
         }
     }
 }
