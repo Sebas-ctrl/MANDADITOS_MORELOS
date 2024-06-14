@@ -4,9 +4,9 @@ using MANDADITOS_MORELOS.Models;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
+builder.Configuration.AddUserSecrets<Program>();
 builder.Services.AddControllers();
-builder.Services.AddDbContext<UsuariosContext>(options =>
+builder.Services.AddDbContext<MorelosContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("connection_to_mysql");
     options.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 0, 36)));
