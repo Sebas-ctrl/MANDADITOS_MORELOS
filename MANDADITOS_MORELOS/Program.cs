@@ -5,7 +5,24 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Configuration.AddUserSecrets<Program>();
+
+var AllowExpoApp = "_AllowSpecificOriginsExpoApp";
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(name: AllowExpoApp,
+        policy =>
+        {
+            //policy.WithOrigins("exp://localhost:8081")
+            policy.AllowAnyOrigin()
+                   .AllowAnyMethod()
+                   .AllowAnyHeader();
+        });
+});
+
 builder.Services.AddControllers();
+
+
 builder.Services.AddDbContext<MorelosContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("connection_to_mysql");
@@ -26,6 +43,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors();
 
 app.UseAuthorization();
 

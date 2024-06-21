@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using MANDADITOS_MORELOS.Models;
 using System.Data.SqlClient;
 using MySqlConnector;
+using Microsoft.AspNetCore.Cors;
 
 namespace MANDADITOS_MORELOS.Controllers
 {
