@@ -1,14 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MANDADITOS_MORELOS.Models;
-using System.Data.SqlClient;
 using MySqlConnector;
-using Microsoft.AspNetCore.Cors;
+using MANDADITOS_MORELOS.Functions;
 
 namespace MANDADITOS_MORELOS.Controllers
 {
@@ -83,7 +77,7 @@ namespace MANDADITOS_MORELOS.Controllers
             await _context.Database.ExecuteSqlRawAsync("CALL sp_insertar_usuario (@v_nombre, @v_correo, @v_contrasenia)",
                 new MySqlParameter("@v_nombre", personasModel.Nombre),
                 new MySqlParameter("@v_correo", personasModel.CorreoElectronico),
-                new MySqlParameter("@v_contrasenia", personasModel.Contrasenia));
+                new MySqlParameter("@v_contrasenia", Encrypt.EncryptSHA256(personasModel.Contrasenia)));
 
             var nuevoUsuario = await _context.Personas
                 .FirstOrDefaultAsync(u => u.CorreoElectronico== personasModel.CorreoElectronico);

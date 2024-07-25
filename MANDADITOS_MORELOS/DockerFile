@@ -1,0 +1,17 @@
+# Usa la imagen oficial de .NET Core SDK para compilar
+FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
+WORKDIR /app
+
+# Copia los archivos de proyecto y restaura las dependencias
+COPY *.csproj ./
+RUN dotnet restore
+
+# Copia el resto del código y compila la aplicación
+COPY . ./
+RUN dotnet publish -c Release -o out
+
+# Usa la imagen oficial de ASP.NET Core Runtime para ejecutar la aplicación
+FROM mcr.microsoft.com/dotnet/aspnet:7.0
+WORKDIR /app
+COPY --from=build /app/out .
+ENTRYPOINT ["dotnet", "MyAspNetApp.dll"]

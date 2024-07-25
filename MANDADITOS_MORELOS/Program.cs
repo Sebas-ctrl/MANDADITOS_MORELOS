@@ -15,8 +15,8 @@ builder.Services.AddCors(options =>
         {
             //policy.WithOrigins("exp://localhost:8081")
             policy.AllowAnyOrigin()
-                   .AllowAnyMethod()
-                   .AllowAnyHeader();
+                       .AllowAnyHeader()
+                       .AllowAnyMethod();
         });
 });
 
@@ -44,7 +44,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.UseCors();
+app.UseCors(AllowExpoApp);
 
 app.UseAuthorization();
 
