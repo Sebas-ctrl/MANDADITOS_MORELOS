@@ -6,6 +6,5 @@ namespace MANDADITOS_MORELOS.Models
     {
         [Key]
         public int PersonaID { get; set; }
-
     }
 }
