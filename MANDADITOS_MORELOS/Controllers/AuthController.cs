@@ -71,7 +71,8 @@ namespace MANDADITOS_MORELOS.Controllers
                 Subject = new ClaimsIdentity(new Claim[]
                 {
                 new Claim(ClaimTypes.Email, persona.CorreoElectronico),
-                new Claim(ClaimTypes.Name, persona.Nombre)
+                new Claim(ClaimTypes.Name, persona.Nombre),
+                new Claim("LastName", persona.Apellidos)
                 }),
                 Expires = DateTime.UtcNow.AddHours(1),
                 Issuer = _jwtSettings.Issuer,
@@ -163,7 +164,8 @@ namespace MANDADITOS_MORELOS.Controllers
                 Subject = new ClaimsIdentity(new Claim[]
                 {
                 new Claim(ClaimTypes.Email, persona.CorreoElectronico),
-                new Claim(ClaimTypes.Name, persona.Nombre)
+                new Claim(ClaimTypes.Name, persona.Nombre),
+                new Claim("LastName", persona.Apellidos)
                 }),
                 Expires = DateTime.UtcNow.AddMinutes(15),
                 Issuer = _jwtSettings.Issuer,
@@ -182,10 +184,12 @@ namespace MANDADITOS_MORELOS.Controllers
             {
                 var email = principal.FindFirst(ClaimTypes.Email)?.Value;
                 var name = principal.FindFirst(ClaimTypes.Name)?.Value;
+                var lastName = principal.FindFirst("LastName")?.Value;
 
                 return Ok(new
                 {
                     Name = name,
+                    LastName = lastName,
                     Email = email
                 });
             }

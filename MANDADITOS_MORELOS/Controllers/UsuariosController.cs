@@ -72,10 +72,11 @@ namespace MANDADITOS_MORELOS.Controllers
         // POST: api/Usuarios
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<PersonasModel>> PostUsuariosModel(PersonasModel personasModel)
+        public async Task<ActionResult<PersonasModel>> PostUsuariosModel([FromBody] PersonasModel personasModel)
         {
-            await _context.Database.ExecuteSqlRawAsync("CALL sp_insertar_usuario (@v_nombre, @v_correo, @v_contrasenia)",
+            await _context.Database.ExecuteSqlRawAsync("CALL sp_insertar_usuario (@v_nombre, @v_apellidos, @v_correo, @v_contrasenia)",
                 new MySqlParameter("@v_nombre", personasModel.Nombre),
+                new MySqlParameter("@v_apellidos", personasModel.Apellidos),
                 new MySqlParameter("@v_correo", personasModel.CorreoElectronico),
                 new MySqlParameter("@v_contrasenia", Encrypt.EncryptSHA256(personasModel.Contrasenia)));
 
