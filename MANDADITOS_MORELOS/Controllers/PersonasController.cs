@@ -41,7 +41,7 @@ namespace MANDADITOS_MORELOS.Controllers
 
             try
             {
-                var uploadsFolderPath = Path.Combine(_environment.ContentRootPath, "data");
+                var uploadsFolderPath = Path.Combine(_environment.ContentRootPath, "Data/Images");
                 Directory.CreateDirectory(uploadsFolderPath);
 
                 var fileName = Guid.NewGuid().ToString() + Path.GetExtension(foto.FileName);
@@ -52,7 +52,7 @@ namespace MANDADITOS_MORELOS.Controllers
                     await foto.CopyToAsync(stream);
                 }
 
-                personasModel.Foto = $"data/{fileName}";
+                personasModel.Foto = $"Data/Images/{fileName}";
                 _context.Entry(personasModel).Property(p => p.Foto).IsModified = true;
 
                 await _context.SaveChangesAsync();
