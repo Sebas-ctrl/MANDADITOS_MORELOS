@@ -12,7 +12,8 @@ namespace MANDADITOS_MORELOS.Models
         public string CorreoElectronico { get; set; }
         public string Contrasenia { get; set; }
 
-        public string? RefreshToken {  get; set; }
+        public string? Foto { get; set; }
+        public string? RefreshToken { get; set; }
 
     }
 }

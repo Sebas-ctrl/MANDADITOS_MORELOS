@@ -163,6 +163,7 @@ namespace MANDADITOS_MORELOS.Controllers
             {
                 Subject = new ClaimsIdentity(new Claim[]
                 {
+                new Claim("Photo", persona.Foto),
                 new Claim(ClaimTypes.Email, persona.CorreoElectronico),
                 new Claim(ClaimTypes.Name, persona.Nombre),
                 new Claim("LastName", persona.Apellidos)
@@ -182,12 +183,14 @@ namespace MANDADITOS_MORELOS.Controllers
 
             if (principal != null)
             {
+                var photo = principal.FindFirst("Photo")?.Value;
                 var email = principal.FindFirst(ClaimTypes.Email)?.Value;
                 var name = principal.FindFirst(ClaimTypes.Name)?.Value;
                 var lastName = principal.FindFirst("LastName")?.Value;
 
                 return Ok(new
                 {
+                    Photo = photo,
                     Name = name,
                     LastName = lastName,
                     Email = email

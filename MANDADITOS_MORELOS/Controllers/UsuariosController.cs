@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using MANDADITOS_MORELOS.Models;
 using MySqlConnector;
 using MANDADITOS_MORELOS.Functions;
+using System;
 
 namespace MANDADITOS_MORELOS.Controllers
 {
@@ -74,11 +75,12 @@ namespace MANDADITOS_MORELOS.Controllers
         [HttpPost]
         public async Task<ActionResult<PersonasModel>> PostUsuariosModel([FromBody] PersonasModel personasModel)
         {
-            await _context.Database.ExecuteSqlRawAsync("CALL sp_insertar_usuario (@v_nombre, @v_apellidos, @v_correo, @v_contrasenia)",
+            await _context.Database.ExecuteSqlRawAsync("CALL sp_insertar_usuario (@v_nombre, @v_apellidos, @v_correo, @v_contrasenia, @v_foto)",
                 new MySqlParameter("@v_nombre", personasModel.Nombre),
                 new MySqlParameter("@v_apellidos", personasModel.Apellidos),
                 new MySqlParameter("@v_correo", personasModel.CorreoElectronico),
-                new MySqlParameter("@v_contrasenia", Encrypt.EncryptSHA256(personasModel.Contrasenia)));
+                new MySqlParameter("@v_contrasenia", Encrypt.EncryptSHA256(personasModel.Contrasenia)),
+                new MySqlParameter("@v_foto", personasModel.Foto));
 
             var nuevoUsuario = await _context.Personas
                 .FirstOrDefaultAsync(u => u.CorreoElectronico== personasModel.CorreoElectronico);
