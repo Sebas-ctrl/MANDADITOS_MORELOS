@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.Extensions.Options;
+using System.Net.WebSockets;
 
 namespace MANDADITOS_MORELOS.Controllers
 {
@@ -27,9 +28,19 @@ namespace MANDADITOS_MORELOS.Controllers
         }
 
         // GET: api/Auth/token
-        [HttpGet("{token}")]
-        public async Task<ActionResult<string>> AuthUserToken(string token)
+        [HttpGet]
+        public async Task<ActionResult<string>> AuthUserToken()
         {
+            var authorizationHeader = HttpContext.Request.Headers["Authorization"].FirstOrDefault();
+
+            if (authorizationHeader == null || !authorizationHeader.StartsWith("Bearer "))
+            {
+                return BadRequest("Missing or invalid Authorization header");
+            }
+
+            // Extraer el token JWT
+            var token = authorizationHeader.Substring("Bearer ".Length).Trim();
+
             object user = ProcessToken(token);
 
             if (user == null)
@@ -47,6 +58,23 @@ namespace MANDADITOS_MORELOS.Controllers
         {
             if (loginRequest == null || !ModelState.IsValid)
             {
+                var authorizationHeader = HttpContext.Request.Headers["Authorization"].FirstOrDefault();
+
+                if (authorizationHeader == null || !authorizationHeader.StartsWith("Bearer "))
+                {
+                    return BadRequest("Missing or invalid Authorization header");
+                }
+
+                // Extraer el token JWT
+                var userToken = authorizationHeader.Substring("Bearer ".Length).Trim();
+
+                object user = ProcessToken(userToken);
+
+                if (user == null)
+                {
+                    return BadRequest("Invalid token");
+                }
+
                 return BadRequest(new { message = "InvalidRequest" });
             }
 
@@ -66,14 +94,21 @@ namespace MANDADITOS_MORELOS.Controllers
 
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_jwtSettings.SecretKey);
-            var tokenDescriptor = new SecurityTokenDescriptor
+            var claims = new List<Claim>
             {
-                Subject = new ClaimsIdentity(new Claim[]
-                {
                 new Claim(ClaimTypes.Email, persona.CorreoElectronico),
                 new Claim(ClaimTypes.Name, persona.Nombre),
                 new Claim("LastName", persona.Apellidos)
-                }),
+            };
+
+            if (!string.IsNullOrEmpty(persona.Foto))
+            {
+                claims.Add(new Claim("Photo", persona.Foto));
+            }
+
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(claims),
                 Expires = DateTime.UtcNow.AddHours(1),
                 Issuer = _jwtSettings.Issuer,
                 Audience = _jwtSettings.Audience,
@@ -82,78 +117,55 @@ namespace MANDADITOS_MORELOS.Controllers
             var token = tokenHandler.CreateToken(tokenDescriptor);
             var tokenString = tokenHandler.WriteToken(token);
 
-            var refreshToken = GenerateRefreshToken();
-
-            persona.RefreshToken = refreshToken;
             await _context.SaveChangesAsync();
 
             return Ok(new
             {
-                Token = tokenString,
-                RefreshToken = refreshToken
+                Token = tokenString
             });
         }
 
-        [HttpPost("refresh")]
-        public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenReq request)
+        // Función para manejar la conexión WebSocket
+        [HttpGet("ws")]
+        public async Task HandleWebSocket()
         {
-            if (string.IsNullOrWhiteSpace(request.AccessToken) || string.IsNullOrWhiteSpace(request.RefreshToken))
+            if (HttpContext.WebSockets.IsWebSocketRequest)
             {
-                return BadRequest(new { message = "Invalid token or refresh token" });
+                var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
+                var buffer = new byte[1024 * 4];
+                WebSocketReceiveResult result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+
+                while (!result.CloseStatus.HasValue)
+                {
+                    // Generar y enviar nuevo token JWT
+                    var authorizationHeader = HttpContext.Request.Headers["Authorization"].FirstOrDefault();
+
+                    if (authorizationHeader != null && authorizationHeader.StartsWith("Bearer "))
+                    {
+                        var token = authorizationHeader.Substring("Bearer ".Length).Trim();
+                        var persona = ProcessToken(token);
+
+                        if (persona != null)
+                        {
+                            var newToken = GenerateJwtToken(persona as PersonasModel);
+                            var tokenBytes = Encoding.UTF8.GetBytes(newToken);
+
+                            // Enviar el nuevo token al cliente
+                            await webSocket.SendAsync(new ArraySegment<byte>(tokenBytes, 0, tokenBytes.Length), result.MessageType, result.EndOfMessage, CancellationToken.None);
+                        }
+                    }
+
+                    // Recibir más mensajes si es necesario
+                    result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                }
+
+                await webSocket.CloseAsync(result.CloseStatus.Value, result.CloseStatusDescription, CancellationToken.None);
             }
-
-            ClaimsPrincipal principal;
-
-            try
+            else
             {
-                principal = GetPrincipalFromExpiredToken(request.AccessToken);
+                HttpContext.Response.StatusCode = 400;
             }
-            catch (SecurityTokenException)
-            {
-                return Unauthorized(new { message = "Invalid or expired access token" });
-            }
-            catch (Exception)
-            {
-                return Unauthorized(new { message = "Token validation failed" });
-            }
-
-            var email = principal.Identity.Name;
-            if (string.IsNullOrEmpty(email))
-            {
-                return Unauthorized(new { message = "Invalid token" });
-            }
-
-            var persona = await _context.Personas.FirstOrDefaultAsync(p => p.CorreoElectronico == email);
-
-            if (persona == null)
-            {
-                return Unauthorized(new { message = "User not found" });
-            }
-
-            // Log the tokens for debugging
-            Console.WriteLine($"Stored Refresh Token: {persona.RefreshToken}");
-            Console.WriteLine($"Requested Refresh Token: {request.RefreshToken}");
-            Console.WriteLine($"Email from token: {email}");
-
-            if (request.RefreshToken != persona.RefreshToken)
-            {
-                return Unauthorized(new { message = "Invalid refresh token" });
-            }
-
-            var newToken = GenerateJwtToken(persona);
-            var newRefreshToken = GenerateRefreshToken();
-
-            // Update the refresh token in the database
-            persona.RefreshToken = newRefreshToken;
-            await _context.SaveChangesAsync();
-
-            return Ok(new
-            {
-                Token = newToken,
-                RefreshToken = newRefreshToken
-            });
         }
-
 
         private string GenerateJwtToken(PersonasModel persona)
         {
@@ -188,63 +200,18 @@ namespace MANDADITOS_MORELOS.Controllers
                 var name = principal.FindFirst(ClaimTypes.Name)?.Value;
                 var lastName = principal.FindFirst("LastName")?.Value;
 
-                return Ok(new
+                return new PersonasModel
                 {
-                    Photo = photo,
-                    Name = name,
-                    LastName = lastName,
-                    Email = email
-                });
+                    Foto = photo,
+                    CorreoElectronico = email,
+                    Nombre = name,
+                    Apellidos = lastName
+                };
             }
             else
             {
-                return "Token inválido.";
+                return null;
             }
         }
-
-        private string GenerateRefreshToken()
-        {
-            // Implementar lógica para generar un token de actualización
-            return Guid.NewGuid().ToString(); // Ejemplo simple, considera usar una solución más segura
-        }
-
-        private ClaimsPrincipal GetPrincipalFromExpiredToken(string token)
-        {
-            var tokenHandler = new JwtSecurityTokenHandler();
-
-            try
-            {
-                var validationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(_jwtSettings.SecretKey)),
-                    ValidateIssuer = false,
-                    ValidateAudience = false,
-                    ValidateLifetime = false // Permite validar un token expirado
-                };
-
-                var principal = tokenHandler.ValidateToken(token, validationParameters, out var validatedToken);
-
-                // Verifica si el token es un JwtSecurityToken
-                if (validatedToken is not JwtSecurityToken jwtToken)
-                {
-                    throw new SecurityTokenException("Invalid token type");
-                }
-
-                return principal;
-            }
-            catch (SecurityTokenException ex)
-            {
-                // Manejo del error y registro
-                throw new SecurityTokenException("Token validation failed", ex);
-            }
-            catch (Exception ex)
-            {
-                // Manejo del error general y registro
-                throw new SecurityTokenException("Token validation failed", ex);
-            }
-        }
-
-
     }
 }
