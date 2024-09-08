@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Amazon;
+using Amazon.S3;
+using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,6 +56,14 @@ builder.Services.AddDbContext<MorelosContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("connection_to_mysql");
     options.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 0, 36)));
+});
+
+builder.Services.AddSingleton<IAmazonS3>(sp =>
+{
+    var accessKey = builder.Configuration["AWS:AccessKey"];
+    var secretKey = builder.Configuration["AWS:SecretKey"];
+    var region = builder.Configuration["AWS:Region"];
+    return new AmazonS3Client(accessKey, secretKey, RegionEndpoint.GetBySystemName(region));
 });
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle

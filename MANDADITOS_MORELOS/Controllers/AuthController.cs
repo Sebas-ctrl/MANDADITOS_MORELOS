@@ -92,6 +92,122 @@ namespace MANDADITOS_MORELOS.Controllers
                 return Unauthorized(new { message = "InvalidPassword" });
             }
 
+            // Llamada a la función GenerateJwtToken para generar el token
+            var tokenString = GenerateJwtToken(persona);
+
+            var refreshToken = GenerateRefreshToken();
+            persona.RefreshToken = refreshToken;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                Token = tokenString,
+                RefreshToken = refreshToken
+            });
+        }
+
+        [HttpPost("refresh")]
+        public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
+        {
+            // Obtener el token del cuerpo de la solicitud
+            var refreshToken = request.RefreshToken;
+
+            if (string.IsNullOrEmpty(refreshToken))
+            {
+                return BadRequest("Token no proporcionado.");
+            }
+
+            // Validar el token y obtener la información del usuario
+            var persona = await _context.Personas.FirstOrDefaultAsync(p => p.RefreshToken == refreshToken);
+
+            if (persona == null)
+            {
+                return Unauthorized("Invalid refresh token.");
+            }
+
+            // Generar un nuevo token
+            var newToken = GenerateJwtToken(persona as PersonasModel);
+            var newRefreshToken = GenerateRefreshToken();
+
+            // Almacenar el token de refresco en la base de datos
+            persona.RefreshToken = newRefreshToken;
+
+            await _context.SaveChangesAsync();
+
+            // Devolver el nuevo token al cliente
+            return Ok(new { 
+                Token = newToken,
+                RefreshToken = newRefreshToken
+            });
+        }
+
+        // Clase de solicitud para el refresh token
+        public class RefreshTokenRequest
+        {
+            public string RefreshToken { get; set; }
+        }
+
+
+        // Función para manejar la conexión WebSocket
+        [HttpGet("ws")]
+        public async Task HandleWebSocket()
+        {
+            if (HttpContext.WebSockets.IsWebSocketRequest)
+            {
+                try
+                {
+                    var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
+                    var buffer = new byte[1024 * 4];
+
+                    // Obtener el token de los parámetros de consulta en la URL
+                    var queryToken = HttpContext.Request.Query["token"].ToString();
+
+                    if (string.IsNullOrEmpty(queryToken))
+                    {
+                        await webSocket.CloseAsync(WebSocketCloseStatus.PolicyViolation, "No token provided", CancellationToken.None);
+                        return;
+                    }
+
+                    // Procesar el token
+                    var persona = ProcessToken(queryToken);
+                    if (persona == null)
+                    {
+                        await webSocket.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Invalid token", CancellationToken.None);
+                        return;
+                    }
+
+                    WebSocketReceiveResult result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+
+                    while (!result.CloseStatus.HasValue)
+                    {
+                        // Generar y enviar nuevo token JWT
+                        var newToken = GenerateJwtToken(persona as PersonasModel);
+                        var tokenBytes = Encoding.UTF8.GetBytes(newToken);
+
+                        // Enviar el nuevo token al cliente
+                        await webSocket.SendAsync(new ArraySegment<byte>(tokenBytes, 0, tokenBytes.Length), result.MessageType, result.EndOfMessage, CancellationToken.None);
+
+                        // Recibir más mensajes si es necesario
+                        result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                    }
+
+                    // Cerrar el WebSocket
+                    await webSocket.CloseAsync(result.CloseStatus.Value, result.CloseStatusDescription, CancellationToken.None);
+                }
+                catch (WebSocketException ex)
+                {
+                    Console.WriteLine($"WebSocketException: {ex.ToString()}");
+                }
+            }
+            else
+            {
+                HttpContext.Response.StatusCode = 400;
+            }
+        }
+
+        private string GenerateJwtToken(PersonasModel persona)
+        {
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_jwtSettings.SecretKey);
             var claims = new List<Claim>
@@ -105,81 +221,9 @@ namespace MANDADITOS_MORELOS.Controllers
             {
                 claims.Add(new Claim("Photo", persona.Foto));
             }
-
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.UtcNow.AddHours(1),
-                Issuer = _jwtSettings.Issuer,
-                Audience = _jwtSettings.Audience,
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
-            };
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            var tokenString = tokenHandler.WriteToken(token);
-
-            await _context.SaveChangesAsync();
-
-            return Ok(new
-            {
-                Token = tokenString
-            });
-        }
-
-        // Función para manejar la conexión WebSocket
-        [HttpGet("ws")]
-        public async Task HandleWebSocket()
-        {
-            if (HttpContext.WebSockets.IsWebSocketRequest)
-            {
-                var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
-                var buffer = new byte[1024 * 4];
-                WebSocketReceiveResult result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-
-                while (!result.CloseStatus.HasValue)
-                {
-                    // Generar y enviar nuevo token JWT
-                    var authorizationHeader = HttpContext.Request.Headers["Authorization"].FirstOrDefault();
-
-                    if (authorizationHeader != null && authorizationHeader.StartsWith("Bearer "))
-                    {
-                        var token = authorizationHeader.Substring("Bearer ".Length).Trim();
-                        var persona = ProcessToken(token);
-
-                        if (persona != null)
-                        {
-                            var newToken = GenerateJwtToken(persona as PersonasModel);
-                            var tokenBytes = Encoding.UTF8.GetBytes(newToken);
-
-                            // Enviar el nuevo token al cliente
-                            await webSocket.SendAsync(new ArraySegment<byte>(tokenBytes, 0, tokenBytes.Length), result.MessageType, result.EndOfMessage, CancellationToken.None);
-                        }
-                    }
-
-                    // Recibir más mensajes si es necesario
-                    result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-                }
-
-                await webSocket.CloseAsync(result.CloseStatus.Value, result.CloseStatusDescription, CancellationToken.None);
-            }
-            else
-            {
-                HttpContext.Response.StatusCode = 400;
-            }
-        }
-
-        private string GenerateJwtToken(PersonasModel persona)
-        {
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_jwtSettings.SecretKey);
-            var tokenDescriptor = new SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(new Claim[]
-                {
-                new Claim("Photo", persona.Foto),
-                new Claim(ClaimTypes.Email, persona.CorreoElectronico),
-                new Claim(ClaimTypes.Name, persona.Nombre),
-                new Claim("LastName", persona.Apellidos)
-                }),
                 Expires = DateTime.UtcNow.AddMinutes(15),
                 Issuer = _jwtSettings.Issuer,
                 Audience = _jwtSettings.Audience,
@@ -187,6 +231,12 @@ namespace MANDADITOS_MORELOS.Controllers
             };
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
+        }
+
+        private string GenerateRefreshToken()
+        {
+            // Lógica para generar un token de refresco. Esto puede ser una cadena aleatoria, un GUID, etc.
+            return Guid.NewGuid().ToString();
         }
 
         private object ProcessToken(string token)

@@ -1,8 +1,11 @@
-﻿using MANDADITOS_MORELOS.Models;
+﻿using Amazon.S3;
+using Amazon.S3.Model;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-
-// For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+using MANDADITOS_MORELOS.Models;
+using System;
+using System.IO;
+using System.Threading.Tasks;
 
 namespace MANDADITOS_MORELOS.Controllers
 {
@@ -11,15 +14,16 @@ namespace MANDADITOS_MORELOS.Controllers
     public class PersonasController : ControllerBase
     {
         private readonly MorelosContext _context;
-        private readonly IWebHostEnvironment _environment;
+        private readonly IAmazonS3 _s3Client;
+        private readonly string _bucketName = "mandaditos-morelos";
 
-        public PersonasController(MorelosContext context, IWebHostEnvironment environment)
+        public PersonasController(MorelosContext context, IAmazonS3 s3Client)
         {
-            _environment = environment ?? throw new ArgumentNullException(nameof(environment));
             _context = context;
+            _s3Client = s3Client;
         }
 
-        // PUT api/<ValuesController>/user@gmail.com
+        // PUT api/personas/uploadPhoto/user@gmail.com
         [HttpPut("uploadPhoto/{email}")]
         public async Task<IActionResult> PutPersonasModel(string email, [FromForm] IFormFile foto)
         {
@@ -41,18 +45,40 @@ namespace MANDADITOS_MORELOS.Controllers
 
             try
             {
-                var uploadsFolderPath = Path.Combine(_environment.ContentRootPath, "Data/Images");
-                Directory.CreateDirectory(uploadsFolderPath);
-
-                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(foto.FileName);
-                var filePath = Path.Combine(uploadsFolderPath, fileName);
-
-                using (var stream = new FileStream(filePath, FileMode.Create))
+                if (!string.IsNullOrEmpty(personasModel.Foto))
                 {
-                    await foto.CopyToAsync(stream);
+                    var existingFileKey = personasModel.Foto.Replace($"https://{_bucketName}.s3.amazonaws.com/", "");
+                    if (!string.IsNullOrEmpty(existingFileKey))
+                    {
+                        var deleteRequest = new DeleteObjectRequest
+                        {
+                            BucketName = _bucketName,
+                            Key = existingFileKey
+                        };
+                        await _s3Client.DeleteObjectAsync(deleteRequest);
+                    }
                 }
 
-                personasModel.Foto = $"Data/Images/{fileName}";
+                // Generar un nombre único para el archivo
+                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(foto.FileName);
+                var key = $"images/{fileName}";
+
+                // Subir el archivo a S3
+                using (var stream = foto.OpenReadStream())
+                {
+                    var putRequest = new PutObjectRequest
+                    {
+                        BucketName = _bucketName,
+                        Key = key,
+                        InputStream = stream,
+                        ContentType = foto.ContentType
+                    };
+                    await _s3Client.PutObjectAsync(putRequest);
+                }
+
+                // Guardar la URL pública en la base de datos
+                var fileUrl = $"https://{_bucketName}.s3.amazonaws.com/{key}";
+                personasModel.Foto = fileUrl;
                 _context.Entry(personasModel).Property(p => p.Foto).IsModified = true;
 
                 await _context.SaveChangesAsync();
@@ -67,15 +93,17 @@ namespace MANDADITOS_MORELOS.Controllers
             }
         }
 
-        // DELETE api/<ValuesController>/5
-        [HttpDelete("{id}")]
-        public void Delete(int id)
+        [HttpGet("getPhoto/{email}")]
+        public async Task<IActionResult> GetPhoto(string email)
         {
-        }
+            var personasModel = await _context.Personas.FirstOrDefaultAsync(p => p.CorreoElectronico == email);
+            if (personasModel == null || string.IsNullOrEmpty(personasModel.Foto))
+            {
+                return NotFound("Persona o foto no encontrada.");
+            }
 
-        private bool PersonasModelExists(int id)
-        {
-            return _context.Personas.Any(e => e.PersonaID == id);
+            // Devolver la URL de la imagen almacenada en la base de datos
+            return Ok(personasModel.Foto);
         }
     }
 }
