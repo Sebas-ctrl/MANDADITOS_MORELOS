@@ -23,9 +23,38 @@ namespace MANDADITOS_MORELOS.Controllers
             _s3Client = s3Client;
         }
 
+        // PUT: api/Personas/5
+        [HttpPut("{email}")]
+        public async Task<IActionResult> PutPersonasModel(string email, PersonasModel personasModel)
+        {
+            var person = await _context.Personas.FirstOrDefaultAsync(p => p.CorreoElectronico == email);
+            if (person == null) return NotFound("Persona no encontrada.");
+            try
+            {
+                person.Nombre = personasModel.Nombre ?? person.Nombre;
+                person.Apellidos = personasModel.Apellidos ?? person.Apellidos;
+                person.ExpoPushToken = personasModel.ExpoPushToken;
+
+                _context.Entry(person).Property(p => p.Nombre).IsModified = true;
+                _context.Entry(person).Property(p => p.Apellidos).IsModified = true;
+                _context.Entry(person).Property(p => p.ExpoPushToken).IsModified = true;
+
+                await _context.SaveChangesAsync();
+
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                // Log the exception details
+                Console.WriteLine($"Error al procesar la solicitud: {ex.Message}");
+                return StatusCode(500, "Error interno del servidor.");
+            }
+
+        }
+
         // PUT api/personas/uploadPhoto/user@gmail.com
         [HttpPut("uploadPhoto/{email}")]
-        public async Task<IActionResult> PutPersonasModel(string email, [FromForm] IFormFile foto)
+        public async Task<IActionResult> PutPersonasPhoto(string email, [FromForm] IFormFile foto)
         {
             if (foto == null || foto.Length == 0)
             {

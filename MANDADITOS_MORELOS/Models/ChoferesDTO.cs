@@ -1,8 +1,8 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace MANDADITOS_MORELOS.Models
 {
-    public class PersonasModel
+    public class ChoferesDTO
     {
         [Key]
         public int PersonaID { get; set; }
@@ -14,8 +14,14 @@ namespace MANDADITOS_MORELOS.Models
         public string? Foto { get; set; }
 
         public string? RefreshToken { get; set; }
-
         public string? ExpoPushToken { get; set; }
+        public int Disponibilidad { get; set; }
 
+        public int? Unidad { get; set; }
+        public string? Placa { get; set; }
+        public string? Marca { get; set; }
+        public string? Color { get; set; }
+        public int? CantidadValoraciones { get; set; }
+        public float? Puntuacion { get; set; }
     }
 }

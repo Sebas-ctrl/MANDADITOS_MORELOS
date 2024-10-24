@@ -27,7 +27,7 @@ namespace MANDADITOS_MORELOS.Controllers
             _jwtTokenService = jwtTokenService;
         }
 
-        // GET: api/Auth/token
+        // GET: api/Auth
         [HttpGet]
         public async Task<ActionResult<string>> AuthUserToken()
         {
@@ -56,27 +56,7 @@ namespace MANDADITOS_MORELOS.Controllers
         [HttpPost]
         public async Task<ActionResult<PersonasModel>> AuthUser([FromBody] LoginRequest loginRequest)
         {
-            if (loginRequest == null || !ModelState.IsValid)
-            {
-                var authorizationHeader = HttpContext.Request.Headers["Authorization"].FirstOrDefault();
-
-                if (authorizationHeader == null || !authorizationHeader.StartsWith("Bearer "))
-                {
-                    return BadRequest("Missing or invalid Authorization header");
-                }
-
-                // Extraer el token JWT
-                var userToken = authorizationHeader.Substring("Bearer ".Length).Trim();
-
-                object user = ProcessToken(userToken);
-
-                if (user == null)
-                {
-                    return BadRequest("Invalid token");
-                }
-
-                return BadRequest(new { message = "InvalidRequest" });
-            }
+            if (loginRequest == null || !ModelState.IsValid) return BadRequest(new { message = "InvalidRequest" });
 
             var persona = await _context.Personas.FirstOrDefaultAsync(p => p.CorreoElectronico == loginRequest.Email);
 
@@ -100,46 +80,66 @@ namespace MANDADITOS_MORELOS.Controllers
 
             await _context.SaveChangesAsync();
 
+            var cliente = await _context.Clientes.FirstOrDefaultAsync(p => p.PersonaID == persona.PersonaID);
+
+            if (cliente == null)
+            {
+                return Ok(new
+                {
+                    DriverToken = tokenString,
+                    RefreshToken = refreshToken
+                });
+            }
+
             return Ok(new
             {
-                Token = tokenString,
+                ClientToken = tokenString,
                 RefreshToken = refreshToken
             });
+
         }
 
         [HttpPost("refresh")]
         public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
         {
-            // Obtener el token del cuerpo de la solicitud
-            var refreshToken = request.RefreshToken;
-
-            if (string.IsNullOrEmpty(refreshToken))
+            try
             {
-                return BadRequest("Token no proporcionado.");
-            }
+                // Obtener el token del cuerpo de la solicitud
+                var refreshToken = request.RefreshToken;
 
-            // Validar el token y obtener la información del usuario
-            var persona = await _context.Personas.FirstOrDefaultAsync(p => p.RefreshToken == refreshToken);
+                if (string.IsNullOrEmpty(refreshToken))
+                {
+                    return BadRequest("Token no proporcionado.");
+                }
 
-            if (persona == null)
+                // Validar el token y obtener la información del usuario
+                var persona = await _context.Personas.FirstOrDefaultAsync(p => p.RefreshToken == refreshToken);
+
+                if (persona == null)
+                {
+                    return Unauthorized("Invalid refresh token.");
+                }
+
+                // Generar un nuevo token
+                var newToken = GenerateJwtToken(persona as PersonasModel);
+                var newRefreshToken = GenerateRefreshToken();
+
+                // Almacenar el token de refresco en la base de datos
+                persona.RefreshToken = newRefreshToken;
+
+                await _context.SaveChangesAsync();
+
+                // Devolver el nuevo token al cliente
+                return Ok(new
+                {
+                    Token = newToken,
+                    RefreshToken = newRefreshToken
+                });
+            }catch(Exception ex)
             {
-                return Unauthorized("Invalid refresh token.");
+                Console.WriteLine($"Error: {ex}");
+                return null;
             }
-
-            // Generar un nuevo token
-            var newToken = GenerateJwtToken(persona as PersonasModel);
-            var newRefreshToken = GenerateRefreshToken();
-
-            // Almacenar el token de refresco en la base de datos
-            persona.RefreshToken = newRefreshToken;
-
-            await _context.SaveChangesAsync();
-
-            // Devolver el nuevo token al cliente
-            return Ok(new { 
-                Token = newToken,
-                RefreshToken = newRefreshToken
-            });
         }
 
         // Clase de solicitud para el refresh token
@@ -148,8 +148,6 @@ namespace MANDADITOS_MORELOS.Controllers
             public string RefreshToken { get; set; }
         }
 
-
-        // Función para manejar la conexión WebSocket
         [HttpGet("ws")]
         public async Task HandleWebSocket()
         {
@@ -214,7 +212,8 @@ namespace MANDADITOS_MORELOS.Controllers
             {
                 new Claim(ClaimTypes.Email, persona.CorreoElectronico),
                 new Claim(ClaimTypes.Name, persona.Nombre),
-                new Claim("LastName", persona.Apellidos)
+                new Claim("LastName", persona.Apellidos),
+                new Claim("PersonaID", persona.PersonaID.ToString()),
             };
 
             if (!string.IsNullOrEmpty(persona.Foto))
@@ -235,7 +234,6 @@ namespace MANDADITOS_MORELOS.Controllers
 
         private string GenerateRefreshToken()
         {
-            // Lógica para generar un token de refresco. Esto puede ser una cadena aleatoria, un GUID, etc.
             return Guid.NewGuid().ToString();
         }
 
@@ -246,6 +244,7 @@ namespace MANDADITOS_MORELOS.Controllers
             if (principal != null)
             {
                 var photo = principal.FindFirst("Photo")?.Value;
+                var personaID = principal.FindFirst("PersonaID")?.Value;
                 var email = principal.FindFirst(ClaimTypes.Email)?.Value;
                 var name = principal.FindFirst(ClaimTypes.Name)?.Value;
                 var lastName = principal.FindFirst("LastName")?.Value;
@@ -253,6 +252,7 @@ namespace MANDADITOS_MORELOS.Controllers
                 return new PersonasModel
                 {
                     Foto = photo,
+                    PersonaID = int.Parse(personaID),
                     CorreoElectronico = email,
                     Nombre = name,
                     Apellidos = lastName
