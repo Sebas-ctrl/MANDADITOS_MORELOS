@@ -24,7 +24,6 @@ namespace MANDADITOS_MORELOS.Controllers
             if (request.Method.ToString().Equals("Cash"))
             {
                 decimal monto = request.Amount / 100.0m;
-                monto = Math.Round(monto * 2, MidpointRounding.AwayFromZero) / 2;
 
                 var pago = new PagosModel
                 {

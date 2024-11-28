@@ -82,17 +82,18 @@ namespace MANDADITOS_MORELOS.Controllers
         // POST: api/Clientes
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<PersonasModel>> PostClientesModel([FromBody] PersonasModel personasModel)
+        public async Task<ActionResult<PersonasModel>> PostClientesModel([FromBody] InsertCliente insertCliente)
         {
-            await _context.Database.ExecuteSqlRawAsync("CALL sp_insertar_cliente (@v_nombre, @v_apellidos, @v_correo, @v_contrasenia, @v_foto)",
-                new MySqlParameter("@v_nombre", personasModel.Nombre),
-                new MySqlParameter("@v_apellidos", personasModel.Apellidos),
-                new MySqlParameter("@v_correo", personasModel.CorreoElectronico),
-                new MySqlParameter("@v_contrasenia", Encrypt.EncryptSHA256(personasModel.Contrasenia)),
-                new MySqlParameter("@v_foto", personasModel.Foto));
+            await _context.Database.ExecuteSqlRawAsync("CALL sp_insertar_cliente (@v_nombre, @v_apellidos, @v_correo, @v_contrasenia, @v_foto, @v_metodo_login)",
+                new MySqlParameter("@v_nombre", insertCliente.persona.Nombre),
+                new MySqlParameter("@v_apellidos", insertCliente.persona.Apellidos),
+                new MySqlParameter("@v_correo", insertCliente.persona.CorreoElectronico),
+                new MySqlParameter("@v_contrasenia", insertCliente.persona.Contrasenia != null ? Encrypt.EncryptSHA256(insertCliente.persona.Contrasenia) : null),
+                new MySqlParameter("@v_foto", insertCliente.persona.Foto),
+                new MySqlParameter("@v_metodo_login", insertCliente.MetodoLogin));
 
             var nuevoCliente = await _context.Personas
-                .FirstOrDefaultAsync(u => u.CorreoElectronico== personasModel.CorreoElectronico);
+                .FirstOrDefaultAsync(u => u.CorreoElectronico== insertCliente.persona.CorreoElectronico);
 
             if (nuevoCliente == null)
             {
@@ -102,17 +103,40 @@ namespace MANDADITOS_MORELOS.Controllers
             return CreatedAtAction(nameof(PostClientesModel), new { id = nuevoCliente.PersonaID }, nuevoCliente);
         }
 
+        public class InsertCliente
+        {
+            public PersonasModel? persona { get; set; }
+            public Metodo? MetodoLogin { get; set; }
+
+            public enum Metodo
+            {
+                MandaditosMorelos = 0,
+                Google = 1,
+                Facebook = 2
+            }
+        }
+
         // DELETE: api/Clientes/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteClientesModel(int id)
         {
-            var clientesModel = await _context.Personas.FindAsync(id);
-            if (clientesModel == null)
+            var personasModel = await _context.Personas.FindAsync(id);
+            var clientesModel = await _context.Clientes.FindAsync(id);
+            var googleAccount = await _context.GoogleAccounts.FindAsync(id);
+            if (personasModel == null || clientesModel == null)
             {
                 return NotFound();
             }
 
-            _context.Personas.Remove(clientesModel);
+            if(googleAccount != null)
+            {
+                _context.GoogleAccounts.Remove(googleAccount);
+                await _context.SaveChangesAsync();
+            }
+
+            _context.Clientes.Remove(clientesModel);
+            await _context.SaveChangesAsync();
+            _context.Personas.Remove(personasModel);
             await _context.SaveChangesAsync();
 
             return NoContent();

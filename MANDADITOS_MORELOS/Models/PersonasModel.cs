@@ -16,6 +16,5 @@ namespace MANDADITOS_MORELOS.Models
         public string? RefreshToken { get; set; }
 
         public string? ExpoPushToken { get; set; }
-
     }
 }

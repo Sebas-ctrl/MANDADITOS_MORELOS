@@ -11,6 +11,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.VisualStudio.Web.CodeGenerators.Mvc.Templates.BlazorIdentity.Pages.Manage;
 using System;
+using static MANDADITOS_MORELOS.Controllers.PedidosController;
 
 namespace MANDADITOS_MORELOS.Controllers
 {
@@ -20,56 +21,10 @@ namespace MANDADITOS_MORELOS.Controllers
     public class PedidosController : ControllerBase
     {
         private readonly MorelosContext _context;
-        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(1, 1);
-        private static Dictionary<int, WebSocket> _userWebSockets = new Dictionary<int, WebSocket>();
 
         public PedidosController(MorelosContext context)
         {
             _context = context;
-        }
-
-        [HttpGet("ws/{usuarioId}")]
-        public async Task GetPedidosWebSocket(int usuarioId)
-        {
-            if (HttpContext.WebSockets.IsWebSocketRequest)
-            {
-                var webSocket = await HttpContext.WebSockets.AcceptWebSocketAsync();
-
-                lock (_userWebSockets)
-                {
-                    _userWebSockets[usuarioId] = webSocket;
-                }
-
-                try
-                {
-                    // Enviar datos iniciales al usuario.
-                    var pedidosList = await GetPedidosListForUser(usuarioId);
-                    var initialData = JsonSerializer.Serialize(pedidosList);
-                    var initialDataBytes = Encoding.UTF8.GetBytes(initialData);
-                    await webSocket.SendAsync(new ArraySegment<byte>(initialDataBytes), WebSocketMessageType.Text, true, CancellationToken.None);
-
-                    var buffer = new byte[1024 * 4];
-                    WebSocketReceiveResult result;
-                    do
-                    {
-                        result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-                    } while (!result.CloseStatus.HasValue);
-
-                    await webSocket.CloseAsync(result.CloseStatus.Value, result.CloseStatusDescription, CancellationToken.None);
-                }
-                finally
-                {
-                    lock (_userWebSockets)
-                    {
-                        _userWebSockets.Remove(usuarioId);
-                    }
-                }
-            }
-            else
-            {
-                Console.WriteLine("Petición Inválida: No es un WebSocket");
-                HttpContext.Response.StatusCode = 400;
-            }
         }
 
         private async Task<List<PedidosDTO>> GetPedidosList()
@@ -121,10 +76,142 @@ namespace MANDADITOS_MORELOS.Controllers
 
         }
 
-        private async Task<List<PedidosDTO>> GetPedidosListForUser(int usuarioId)
+        private async Task<List<PedidosDTO>> GetPedidosListForId(int id)
         {
             return await (from p in _context.Pedidos
+                          where p.ID == id
+                          join peC in _context.Personas on p.ClienteID equals peC.PersonaID
+                          join peD in _context.Personas on p.ChoferID equals peD.PersonaID into peDJoin
+                          from peD in peDJoin.DefaultIfEmpty()
+                          join d in _context.Choferes on p.ChoferID equals d.PersonaID into choferJoin
+                          from d in choferJoin.DefaultIfEmpty()
+                          join c in _context.Clientes on p.ClienteID equals c.PersonaID into clienteJoin
+                          from c in clienteJoin.DefaultIfEmpty()
+                          join pa in _context.Pagos on p.PagoID equals pa.ID into pagosJoin
+                          from pa in pagosJoin.DefaultIfEmpty()
+                          select new PedidosDTO
+                          {
+                              ID = p.ID,
+                              Tipo = ConvertirTipoPedido(p.Tipo.ToString()),
+                              LugarOrigen = p.LugarOrigen,
+                              LugarDestino = p.LugarDestino,
+                              FechaInicio = p.FechaInicio,
+                              FechaFin = p.FechaFin,
+                              Estatus = ConvertirEstatus(p.Estatus.ToString()),
+                              Cliente = new PersonasModel
+                              {
+                                  PersonaID = peC.PersonaID,
+                                  Nombre = peC.Nombre,
+                                  Apellidos = peC.Apellidos,
+                                  CorreoElectronico = peC.CorreoElectronico,
+                                  Foto = peC.Foto,
+                                  ExpoPushToken = peC.ExpoPushToken
+                              },
+                              Chofer = new PersonasModel
+                              {
+                                  PersonaID = peD.PersonaID,
+                                  Nombre = peD.Nombre,
+                                  Apellidos = peD.Apellidos,
+                                  CorreoElectronico = peD.CorreoElectronico,
+                                  Foto = peD.Foto,
+                                  ExpoPushToken = peD.ExpoPushToken
+                              },
+                              Pago = new PagosModel
+                              {
+                                  ID = pa.ID,
+                                  Estatus = pa.Estatus,
+                                  Monto = pa.Monto
+                              }
+                          }).ToListAsync();
+
+        }
+
+        private async Task<PaginacionDTO<PedidosDTO>> GetPedidosListForUser(int usuarioId, int pagina)
+        {
+            int pageSize = 20;
+            int skip = (pagina - 1) * pageSize;
+
+            var totalRegistros = await (from p in _context.Pedidos
+                                        where p.ClienteID == usuarioId || p.ChoferID == usuarioId
+                                        select p).CountAsync();
+
+            int totalPaginas = (int)Math.Ceiling(totalRegistros / (double)pageSize);
+
+            var pedidos = await (from p in _context.Pedidos
                           where p.ClienteID == usuarioId || p.ChoferID == usuarioId
+                          join peC in _context.Personas on p.ClienteID equals peC.PersonaID
+                          join peD in _context.Personas on p.ChoferID equals peD.PersonaID into peDJoin
+                          from peD in peDJoin.DefaultIfEmpty()
+                          join d in _context.Choferes on p.ChoferID equals d.PersonaID into choferJoin
+                          from d in choferJoin.DefaultIfEmpty()
+                          join c in _context.Clientes on p.ClienteID equals c.PersonaID into clienteJoin
+                          from c in clienteJoin.DefaultIfEmpty()
+                          join pa in _context.Pagos on p.PagoID equals pa.ID into pagosJoin
+                          from pa in pagosJoin.DefaultIfEmpty()
+                          orderby p.FechaInicio descending
+                          select new PedidosDTO
+                          {
+                              ID = p.ID,
+                              Tipo = ConvertirTipoPedido(p.Tipo.ToString()),
+                              LugarOrigen = p.LugarOrigen,
+                              LugarDestino = p.LugarDestino,
+                              FechaInicio = p.FechaInicio,
+                              FechaFin = p.FechaFin,
+                              Estatus = ConvertirEstatus(p.Estatus.ToString()),
+                              Cliente = new PersonasModel
+                              {
+                                  PersonaID = peC.PersonaID,
+                                  Nombre = peC.Nombre,
+                                  Apellidos = peC.Apellidos,
+                                  CorreoElectronico = peC.CorreoElectronico,
+                                  Foto = peC.Foto,
+                                  ExpoPushToken = peC.ExpoPushToken
+                              },
+                              Chofer = new PersonasModel
+                              {
+                                  PersonaID = peD.PersonaID,
+                                  Nombre = peD.Nombre,
+                                  Apellidos = peD.Apellidos,
+                                  CorreoElectronico = peD.CorreoElectronico,
+                                  Foto = peD.Foto,
+                                  ExpoPushToken = peD.ExpoPushToken
+                              },
+                              Pago = new PagosModel
+                              {
+                                  ID = pa.ID,
+                                  Estatus = pa.Estatus,
+                                  Monto = pa.Monto
+                              }
+                          })
+                          .Skip(skip)
+                          .Take(pageSize)
+                          .ToListAsync();
+
+            return new PaginacionDTO<PedidosDTO>
+            {
+                Datos = pedidos,
+                PaginaActual = pagina,
+                TotalPaginas = totalPaginas,
+                RegistrosPorPagina = pageSize,
+                TotalRegistros = totalRegistros
+            };
+        }
+
+        public class PaginacionDTO<T>
+        {
+            public List<T> Datos { get; set; }
+            public int PaginaActual { get; set; }
+            public int TotalPaginas { get; set; }
+            public int RegistrosPorPagina { get; set; }
+            public int TotalRegistros { get; set; }
+        }
+
+
+        private async Task<List<PedidosDTO>> GetPedidosPendientesListForUser(int usuarioId)
+        {
+            return await (from p in _context.Pedidos
+                          where (p.ClienteID == usuarioId || p.ChoferID == usuarioId)
+                            && (p.Estatus == TipoEstado.Pendiente || p.Estatus == TipoEstado.EnCurso)
                           join peC in _context.Personas on p.ClienteID equals peC.PersonaID
                           join peD in _context.Personas on p.ChoferID equals peD.PersonaID into peDJoin
                           from peD in peDJoin.DefaultIfEmpty()
@@ -170,6 +257,55 @@ namespace MANDADITOS_MORELOS.Controllers
                           }).ToListAsync();
         }
 
+        private async Task<List<PedidosDTO>> GetPedidosNoPuntuadosListForUser(int usuarioId)
+        {
+            return await (from p in _context.Pedidos
+                          where (p.ClienteID == usuarioId || p.ChoferID == usuarioId)
+                            && p.Estatus == TipoEstado.Completado && (p.Puntuado == false || p.Puntuado == null)
+                          join peC in _context.Personas on p.ClienteID equals peC.PersonaID
+                          join peD in _context.Personas on p.ChoferID equals peD.PersonaID into peDJoin
+                          from peD in peDJoin.DefaultIfEmpty()
+                          join d in _context.Choferes on p.ChoferID equals d.PersonaID into choferJoin
+                          from d in choferJoin.DefaultIfEmpty()
+                          join c in _context.Clientes on p.ClienteID equals c.PersonaID into clienteJoin
+                          from c in clienteJoin.DefaultIfEmpty()
+                          join pa in _context.Pagos on p.PagoID equals pa.ID into pagosJoin
+                          from pa in pagosJoin.DefaultIfEmpty()
+                          select new PedidosDTO
+                          {
+                              ID = p.ID,
+                              Tipo = ConvertirTipoPedido(p.Tipo.ToString()),
+                              LugarOrigen = p.LugarOrigen,
+                              LugarDestino = p.LugarDestino,
+                              FechaInicio = p.FechaInicio,
+                              FechaFin = p.FechaFin,
+                              Estatus = ConvertirEstatus(p.Estatus.ToString()),
+                              Cliente = new PersonasModel
+                              {
+                                  PersonaID = peC.PersonaID,
+                                  Nombre = peC.Nombre,
+                                  Apellidos = peC.Apellidos,
+                                  CorreoElectronico = peC.CorreoElectronico,
+                                  Foto = peC.Foto,
+                                  ExpoPushToken = peC.ExpoPushToken
+                              },
+                              Chofer = new PersonasModel
+                              {
+                                  PersonaID = peD.PersonaID,
+                                  Nombre = peD.Nombre,
+                                  Apellidos = peD.Apellidos,
+                                  CorreoElectronico = peD.CorreoElectronico,
+                                  Foto = peD.Foto,
+                                  ExpoPushToken = peD.ExpoPushToken
+                              },
+                              Pago = new PagosModel
+                              {
+                                  ID = pa.ID,
+                                  Estatus = pa.Estatus,
+                                  Monto = pa.Monto
+                              }
+                          }).ToListAsync();
+        }
 
         // GET: api/Pedidos
         [HttpGet]
@@ -201,10 +337,47 @@ namespace MANDADITOS_MORELOS.Controllers
         }
 
         // GET: api/Pedidos/5
-        [HttpGet("{usuarioId}")]
-        public async Task<ActionResult<PedidosDTO>> GetPedidosModel(int usuarioId)
+        [HttpGet("porUsuario/{usuarioId}")]
+        public async Task<ActionResult<PedidosDTO>> GetPedidosPorUsuarioModel(int usuarioId, int pagina)
         {
-            var pedidos = await GetPedidosListForUser(usuarioId);
+            var pedidos = await GetPedidosListForUser(usuarioId, pagina);
+            if (pedidos == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(pedidos);
+        }
+
+        [HttpGet("porId/{id}")]
+        public async Task<ActionResult<PedidosDTO>> GetPedidoPorIdModel(int id)
+        {
+            var pedido = await GetPedidosListForId(id);
+
+            if (pedido == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(pedido);
+        }
+
+        [HttpGet("pedidosPendientes/{usuarioId}")]
+        public async Task<ActionResult<PedidosDTO>> GetPedidosPendientesModel(int usuarioId)
+        {
+            var pedidos = await GetPedidosPendientesListForUser(usuarioId);
+            if (pedidos == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(pedidos);
+        }
+
+        [HttpGet("pedidosNoPuntuados/{usuarioId}")]
+        public async Task<ActionResult<PedidosDTO>> GetPedidosNoPuntuadosModel(int usuarioId)
+        {
+            var pedidos = await GetPedidosNoPuntuadosListForUser(usuarioId);
             if (pedidos == null)
             {
                 return NotFound();
@@ -261,30 +434,6 @@ namespace MANDADITOS_MORELOS.Controllers
             public int? Estatus { get; set; }
         }
 
-        private async Task NotifyClientsAboutUpdateOrder(int usuarioId)
-        {
-            var pedidosList = await GetPedidosListForUser(usuarioId);
-            var updatedData = JsonSerializer.Serialize(pedidosList);
-            var updatedDataBytes = Encoding.UTF8.GetBytes(updatedData);
-
-            // Usar el semáforo para bloquear y permitir operaciones async
-            await _semaphore.WaitAsync();
-            try
-            {
-                // Verificar si el WebSocket está abierto
-                if (_userWebSockets.TryGetValue(usuarioId, out var webSocket) && webSocket.State == WebSocketState.Open)
-                {
-                    await webSocket.SendAsync(new ArraySegment<byte>(updatedDataBytes, 0, updatedDataBytes.Length), WebSocketMessageType.Text, true, CancellationToken.None);
-                }
-            }
-            finally
-            {
-                _semaphore.Release(); // Liberar el semáforo al final
-            }
-        }
-
-
-
         // POST: api/Pedidos
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
@@ -310,9 +459,6 @@ namespace MANDADITOS_MORELOS.Controllers
                 _context.Pedidos.Add(pedido);
                 _context.SaveChanges();
 
-                await NotifyClientsAboutUpdateOrder(pedidosInsert.ClienteID);
-                await NotifyClientsAboutUpdateOrder(pedidosInsert.ChoferID);
-
                 return Ok(new { message = "successful", pedido.ID });
             }
             catch (Exception e)
@@ -322,23 +468,37 @@ namespace MANDADITOS_MORELOS.Controllers
         }
 
         // DELETE: api/Choferes/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteChoferesModel(int id)
+        [HttpDelete("pedidoCancelado/{id}")]
+        public async Task<IActionResult> DeletePedidoCanceladoModel(int id)
         {
-            var choferesModel = await _context.Choferes.FindAsync(id);
-            if (choferesModel == null)
+            var pedidosModel = await _context.Pedidos.FindAsync(id);
+            if (pedidosModel != null)
+            {
+                _context.Pedidos.Remove(pedidosModel);
+                await _context.SaveChangesAsync();
+
+                var pagosModel = await _context.Pagos.FindAsync(pedidosModel.PagoID);
+                if (pagosModel != null)
+                {
+                    _context.Pagos.Remove(pagosModel);
+                    await _context.SaveChangesAsync();
+                }
+            }
+
+            return NoContent();
+        }
+
+        // DELETE: api/Choferes/5
+        [HttpDelete("pedidoAgotado/{id}")]
+        public async Task<IActionResult> DeletePedidoAgotadoModel(int id)
+        {
+            var pedidosModel = await _context.Pedidos.FindAsync(id);
+            if (pedidosModel == null)
             {
                 return NotFound();
             }
 
-            _context.Choferes.Remove(choferesModel);
-
-            var personaModel = await _context.Personas.FindAsync(id);
-            if (personaModel != null)
-            {
-                _context.Personas.Remove(personaModel);
-            }
-
+            _context.Pedidos.Remove(pedidosModel);
             await _context.SaveChangesAsync();
 
             return NoContent();

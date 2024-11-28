@@ -134,5 +134,23 @@ namespace MANDADITOS_MORELOS.Controllers
             // Devolver la URL de la imagen almacenada en la base de datos
             return Ok(personasModel.Foto);
         }
+
+        [HttpGet("getPerson/{email}")]
+        public async Task<IActionResult> GetPerson(string email)
+        {
+            var personasModel = await _context.Personas.FirstOrDefaultAsync(p => p.CorreoElectronico == email);
+            if (personasModel == null)
+            {
+                return NotFound("Persona no encontrada.");
+            }
+
+            var isGoogleAccount = await _context.GoogleAccounts.FirstOrDefaultAsync(g => g.IdGoogleAccount == personasModel.PersonaID);
+            if (isGoogleAccount != null)
+            {
+                return Ok(new { googleAccount = personasModel });
+            }
+
+            return Ok(new {persona = personasModel});
+        }
     }
 }

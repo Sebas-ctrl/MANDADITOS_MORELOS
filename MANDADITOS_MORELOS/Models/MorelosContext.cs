@@ -26,6 +26,7 @@ public class MorelosContext : DbContext
 
     public DbSet<PersonasModel> Personas { get; set; } = null!;
     public DbSet<ClientesModel> Clientes { get; set; } = null!;
+    public DbSet<GoogleAccountsModel> GoogleAccounts { get; set; } = null!;
     public DbSet<ChoferesModel> Choferes { get; set; } = null!;
     public DbSet<PagosModel> Pagos { get; set; } = null!;
     public DbSet<UnidadesModel> Unidades { get; set; } = null!;

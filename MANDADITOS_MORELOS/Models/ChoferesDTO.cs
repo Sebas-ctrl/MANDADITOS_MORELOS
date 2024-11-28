@@ -15,7 +15,7 @@ namespace MANDADITOS_MORELOS.Models
 
         public string? RefreshToken { get; set; }
         public string? ExpoPushToken { get; set; }
-        public int Disponibilidad { get; set; }
+        public int? Disponibilidad { get; set; }
 
         public int? Unidad { get; set; }
         public string? Placa { get; set; }
@@ -23,5 +23,6 @@ namespace MANDADITOS_MORELOS.Models
         public string? Color { get; set; }
         public int? CantidadValoraciones { get; set; }
         public float? Puntuacion { get; set; }
+        public int? PedidoID { get; set; }
     }
 }

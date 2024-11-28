@@ -16,6 +16,7 @@ namespace MANDADITOS_MORELOS.Models
         public int? ClienteID { get; set; }
         public int? ChoferID { get; set; }
         public int? PagoID { get; set; }
+        public bool? Puntuado { get; set; }
     }
     public enum Pedido
     {

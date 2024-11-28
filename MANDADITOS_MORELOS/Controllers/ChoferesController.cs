@@ -3,6 +3,8 @@ using MANDADITOS_MORELOS.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MySqlConnector;
+using Stripe;
+using System;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -147,21 +149,45 @@ namespace MANDADITOS_MORELOS.Controllers
             var currentChofer = await _context.Choferes.FindAsync(id);
             var currentPerson = await _context.Personas.FindAsync(id);
             var currentUnit = await _context.Unidades.FirstOrDefaultAsync(u => u.ChoferID == id);
+            var currentOrder = await _context.Pedidos.FirstOrDefaultAsync(p => p.ID == choferesModel.PedidoID);
             var currentRating = await _context.Valoraciones.FirstOrDefaultAsync(v => v.ChoferID == id);
 
-            if(choferesModel.Puntuacion != null)
+            if (choferesModel.Puntuacion != null)
             {
-                if (currentRating == null) return NotFound();
+                if (currentRating == null || currentOrder == null) return NotFound();
 
+                currentOrder.Puntuado = true;
+
+                if (choferesModel.Puntuacion == 0)
+                {
+                    _context.Entry(currentOrder).Property(p => p.Puntuado).IsModified = true;
+                    await _context.SaveChangesAsync();
+                    return NoContent();
+                }
+
+                
+                currentRating.ChoferID = id;
                 currentRating.Cantidad = -1;
                 currentRating.Puntuacion = (float)choferesModel.Puntuacion;
 
+                _context.Entry(currentOrder).Property(p => p.Puntuado).IsModified = true;
+                _context.Entry(currentRating).Property(p => p.ChoferID).IsModified = true;
                 _context.Entry(currentRating).Property(p => p.Cantidad).IsModified = true;
                 _context.Entry(currentRating).Property(p => p.Puntuacion).IsModified = true;
                 await _context.SaveChangesAsync();
 
                 await NotifyClientsAboutUpdateAvailability();
 
+                return NoContent();
+            }
+
+            if (choferesModel.ExpoPushToken != null)
+            {
+                currentPerson.ExpoPushToken = choferesModel.ExpoPushToken;
+                _context.Entry(currentPerson).Property(p => p.ExpoPushToken).IsModified = true;
+                await _context.SaveChangesAsync();
+
+                await NotifyClientsAboutUpdateAvailability();
                 return NoContent();
             }
 
@@ -184,8 +210,8 @@ namespace MANDADITOS_MORELOS.Controllers
                     new MySqlParameter("@v_correoElectronico", choferesModel.CorreoElectronico ?? currentPerson.CorreoElectronico),
                     new MySqlParameter("@v_contrasenia", choferesModel.Contrasenia ?? currentPerson.Contrasenia),
                     new MySqlParameter("@v_foto", choferesModel.Foto ?? currentPerson.Foto),
-                    new MySqlParameter("@v_disponibilidad", choferesModel.Disponibilidad));
-
+                    new MySqlParameter("@v_disponibilidad", choferesModel.Disponibilidad ?? ConvertirDisponibilidad(currentChofer.Disponibilidad.ToString())
+                    ));
 
                 if (cardChanged)
                 {

@@ -3,10 +3,8 @@ using MANDADITOS_MORELOS.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Amazon;
 using Amazon.S3;
-using Microsoft.Extensions.DependencyInjection;
 using Stripe;
 
 var builder = WebApplication.CreateBuilder(args);

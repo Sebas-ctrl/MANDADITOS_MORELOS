@@ -54,8 +54,40 @@ namespace MANDADITOS_MORELOS.Controllers
         // POST: api/Auth
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<PersonasModel>> AuthUser([FromBody] LoginRequest loginRequest)
+        public async Task<ActionResult<PersonasModel>> AuthUser([FromBody] Login loginRequest)
         {
+            if (loginRequest.Password == null)
+            {
+                var authorizationHeader = HttpContext.Request.Headers["Authorization"].FirstOrDefault();
+
+                if (authorizationHeader == null || !authorizationHeader.StartsWith("Bearer "))
+                {
+                    return BadRequest("Missing or invalid Authorization header");
+                }
+                var cuenta = await _context.Personas.FirstOrDefaultAsync(p => p.CorreoElectronico == loginRequest.Email);
+
+                if (cuenta == null)
+                    return NotFound(new { message = "UserNotFound" });
+
+                var googleAccount = await _context.GoogleAccounts.FirstOrDefaultAsync(g => g.IdGoogleAccount == cuenta.PersonaID);
+
+                if(googleAccount == null)
+                    return NotFound(new { message = "Email And Password Is Required" });
+
+                var tokenCuenta = GenerateJwtToken(cuenta);
+
+                var refreshTokenCuenta = GenerateRefreshToken();
+                cuenta.RefreshToken = refreshTokenCuenta;
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    ClientToken = tokenCuenta,
+                    RefreshToken = refreshTokenCuenta
+                });
+            }
+
             if (loginRequest == null || !ModelState.IsValid) return BadRequest(new { message = "InvalidRequest" });
 
             var persona = await _context.Personas.FirstOrDefaultAsync(p => p.CorreoElectronico == loginRequest.Email);
@@ -97,6 +129,11 @@ namespace MANDADITOS_MORELOS.Controllers
                 RefreshToken = refreshToken
             });
 
+        }
+
+        public class Login {
+            public required string Email { get; set; }
+            public string? Password { get; set; }
         }
 
         [HttpPost("refresh")]

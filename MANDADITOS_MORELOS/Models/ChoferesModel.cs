@@ -6,7 +6,7 @@ namespace MANDADITOS_MORELOS.Models
     {
         [Key]
         public int PersonaID {  get; set; }
-        public Disponibilidad Disponibilidad { get; set; }
+        public Disponibilidad? Disponibilidad { get; set; }
     }
 
     public enum Disponibilidad
