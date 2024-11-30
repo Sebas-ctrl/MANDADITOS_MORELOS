@@ -12,6 +12,7 @@ using System.Text.Json;
 using Microsoft.VisualStudio.Web.CodeGenerators.Mvc.Templates.BlazorIdentity.Pages.Manage;
 using System;
 using static MANDADITOS_MORELOS.Controllers.PedidosController;
+using System.ComponentModel.DataAnnotations;
 
 namespace MANDADITOS_MORELOS.Controllers
 {
@@ -126,10 +127,9 @@ namespace MANDADITOS_MORELOS.Controllers
 
         }
 
-        private async Task<PaginacionDTO<PedidosDTO>> GetPedidosListForUser(int usuarioId, int pagina)
+        private async Task<PaginacionDTO<PedidosDTO>> GetPedidosListForUser(int usuarioId, int page, int pageSize)
         {
-            int pageSize = 20;
-            int skip = (pagina - 1) * pageSize;
+            int skip = (page - 1) * pageSize;
 
             var totalRegistros = await (from p in _context.Pedidos
                                         where p.ClienteID == usuarioId || p.ChoferID == usuarioId
@@ -138,51 +138,51 @@ namespace MANDADITOS_MORELOS.Controllers
             int totalPaginas = (int)Math.Ceiling(totalRegistros / (double)pageSize);
 
             var pedidos = await (from p in _context.Pedidos
-                          where p.ClienteID == usuarioId || p.ChoferID == usuarioId
-                          join peC in _context.Personas on p.ClienteID equals peC.PersonaID
-                          join peD in _context.Personas on p.ChoferID equals peD.PersonaID into peDJoin
-                          from peD in peDJoin.DefaultIfEmpty()
-                          join d in _context.Choferes on p.ChoferID equals d.PersonaID into choferJoin
-                          from d in choferJoin.DefaultIfEmpty()
-                          join c in _context.Clientes on p.ClienteID equals c.PersonaID into clienteJoin
-                          from c in clienteJoin.DefaultIfEmpty()
-                          join pa in _context.Pagos on p.PagoID equals pa.ID into pagosJoin
-                          from pa in pagosJoin.DefaultIfEmpty()
-                          orderby p.FechaInicio descending
-                          select new PedidosDTO
-                          {
-                              ID = p.ID,
-                              Tipo = ConvertirTipoPedido(p.Tipo.ToString()),
-                              LugarOrigen = p.LugarOrigen,
-                              LugarDestino = p.LugarDestino,
-                              FechaInicio = p.FechaInicio,
-                              FechaFin = p.FechaFin,
-                              Estatus = ConvertirEstatus(p.Estatus.ToString()),
-                              Cliente = new PersonasModel
-                              {
-                                  PersonaID = peC.PersonaID,
-                                  Nombre = peC.Nombre,
-                                  Apellidos = peC.Apellidos,
-                                  CorreoElectronico = peC.CorreoElectronico,
-                                  Foto = peC.Foto,
-                                  ExpoPushToken = peC.ExpoPushToken
-                              },
-                              Chofer = new PersonasModel
-                              {
-                                  PersonaID = peD.PersonaID,
-                                  Nombre = peD.Nombre,
-                                  Apellidos = peD.Apellidos,
-                                  CorreoElectronico = peD.CorreoElectronico,
-                                  Foto = peD.Foto,
-                                  ExpoPushToken = peD.ExpoPushToken
-                              },
-                              Pago = new PagosModel
-                              {
-                                  ID = pa.ID,
-                                  Estatus = pa.Estatus,
-                                  Monto = pa.Monto
-                              }
-                          })
+                                 where p.ClienteID == usuarioId || p.ChoferID == usuarioId
+                                 join peC in _context.Personas on p.ClienteID equals peC.PersonaID
+                                 join peD in _context.Personas on p.ChoferID equals peD.PersonaID into peDJoin
+                                 from peD in peDJoin.DefaultIfEmpty()
+                                 join d in _context.Choferes on p.ChoferID equals d.PersonaID into choferJoin
+                                 from d in choferJoin.DefaultIfEmpty()
+                                 join c in _context.Clientes on p.ClienteID equals c.PersonaID into clienteJoin
+                                 from c in clienteJoin.DefaultIfEmpty()
+                                 join pa in _context.Pagos on p.PagoID equals pa.ID into pagosJoin
+                                 from pa in pagosJoin.DefaultIfEmpty()
+                                 orderby p.FechaInicio descending
+                                 select new PedidosDTO
+                                 {
+                                     ID = p.ID,
+                                     Tipo = ConvertirTipoPedido(p.Tipo.ToString()),
+                                     LugarOrigen = p.LugarOrigen,
+                                     LugarDestino = p.LugarDestino,
+                                     FechaInicio = p.FechaInicio,
+                                     FechaFin = p.FechaFin,
+                                     Estatus = ConvertirEstatus(p.Estatus.ToString()),
+                                     Cliente = new PersonasModel
+                                     {
+                                         PersonaID = peC.PersonaID,
+                                         Nombre = peC.Nombre,
+                                         Apellidos = peC.Apellidos,
+                                         CorreoElectronico = peC.CorreoElectronico,
+                                         Foto = peC.Foto,
+                                         ExpoPushToken = peC.ExpoPushToken
+                                     },
+                                     Chofer = new PersonasModel
+                                     {
+                                         PersonaID = peD.PersonaID,
+                                         Nombre = peD.Nombre,
+                                         Apellidos = peD.Apellidos,
+                                         CorreoElectronico = peD.CorreoElectronico,
+                                         Foto = peD.Foto,
+                                         ExpoPushToken = peD.ExpoPushToken
+                                     },
+                                     Pago = new PagosModel
+                                     {
+                                         ID = pa.ID,
+                                         Estatus = pa.Estatus,
+                                         Monto = pa.Monto
+                                     }
+                                 })
                           .Skip(skip)
                           .Take(pageSize)
                           .ToListAsync();
@@ -190,7 +190,7 @@ namespace MANDADITOS_MORELOS.Controllers
             return new PaginacionDTO<PedidosDTO>
             {
                 Datos = pedidos,
-                PaginaActual = pagina,
+                PaginaActual = page,
                 TotalPaginas = totalPaginas,
                 RegistrosPorPagina = pageSize,
                 TotalRegistros = totalRegistros
@@ -338,15 +338,23 @@ namespace MANDADITOS_MORELOS.Controllers
 
         // GET: api/Pedidos/5
         [HttpGet("porUsuario/{usuarioId}")]
-        public async Task<ActionResult<PedidosDTO>> GetPedidosPorUsuarioModel(int usuarioId, int pagina)
+        public async Task<ActionResult<PedidosDTO>> GetPedidosPorUsuarioModel(int usuarioId, int page, int pageSize)
         {
-            var pedidos = await GetPedidosListForUser(usuarioId, pagina);
+            var pedidos = await GetPedidosListForUser(usuarioId, page, pageSize);
             if (pedidos == null)
             {
                 return NotFound();
             }
 
             return Ok(pedidos);
+        }
+
+        public class Pagination
+        {
+            [Range(1, int.MaxValue, ErrorMessage = "La página debe ser mayor que 0")]
+            public int Pagina { get; set; }
+            [Range(1, 50, ErrorMessage = "El tamaño de página debe ser mayor que 0 y menor o igual que 50")]
+            public int PaginaSize { get; set; }
         }
 
         [HttpGet("porId/{id}")]
