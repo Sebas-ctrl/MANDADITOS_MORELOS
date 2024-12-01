@@ -191,14 +191,14 @@ namespace MANDADITOS_MORELOS.Controllers
                 return NoContent();
             }
 
-            if (currentChofer == null || currentPerson == null || currentUnit == null)
+            if (currentChofer == null || currentPerson == null)
             {
                 return NotFound();
             }
 
             bool cardChanged =
                 currentPerson.Nombre != choferesModel.Nombre || currentPerson.Apellidos != choferesModel.Apellidos
-                || currentUnit.Unidad != choferesModel.Unidad
+                || (currentUnit != null && currentUnit.Unidad != choferesModel.Unidad)
                 || ConvertirDisponibilidad(currentChofer.Disponibilidad.ToString()) != choferesModel.Disponibilidad;
 
             try
