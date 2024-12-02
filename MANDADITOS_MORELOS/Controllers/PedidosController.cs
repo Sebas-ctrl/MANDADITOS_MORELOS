@@ -338,23 +338,42 @@ namespace MANDADITOS_MORELOS.Controllers
 
         // GET: api/Pedidos/5
         [HttpGet("porUsuario/{usuarioId}")]
-        public async Task<ActionResult<PedidosDTO>> GetPedidosPorUsuarioModel(int usuarioId, int page, int pageSize)
+        public async Task<ActionResult<PedidosDTO>> GetPedidosPorUsuarioModel(int usuarioId, int page, int pageSize, Sort sort)
         {
             var pedidos = await GetPedidosListForUser(usuarioId, page, pageSize);
+
             if (pedidos == null)
             {
                 return NotFound();
             }
 
+            if(sort != Sort.Recientes)
+            {
+                switch (sort)
+                {
+                    case Sort.Antiguos:
+                        pedidos.Datos = [.. pedidos.Datos.OrderBy(p => p.FechaInicio)];
+                        break;
+                    case Sort.PrecioMayorMenor:
+                        pedidos.Datos = [.. pedidos.Datos.OrderByDescending(p => p.Pago?.Monto)];
+                        break;
+                    case Sort.PrecioMenorMayor:
+                        pedidos.Datos = [.. pedidos.Datos.OrderBy(p => p.Pago?.Monto)];
+                        break;
+                    default:
+                        return BadRequest();
+                }
+            }
+
             return Ok(pedidos);
         }
 
-        public class Pagination
+        public enum Sort
         {
-            [Range(1, int.MaxValue, ErrorMessage = "La página debe ser mayor que 0")]
-            public int Pagina { get; set; }
-            [Range(1, 50, ErrorMessage = "El tamaño de página debe ser mayor que 0 y menor o igual que 50")]
-            public int PaginaSize { get; set; }
+            Recientes = 1,
+            Antiguos = 2,
+            PrecioMayorMenor = 3,
+            PrecioMenorMayor = 4
         }
 
         [HttpGet("porId/{id}")]

@@ -4,6 +4,7 @@ using MANDADITOS_MORELOS.Models;
 using MySqlConnector;
 using MANDADITOS_MORELOS.Functions;
 using System;
+using Stripe;
 
 namespace MANDADITOS_MORELOS.Controllers
 {
@@ -53,12 +54,32 @@ namespace MANDADITOS_MORELOS.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> PutClientesModel(int id, PersonasModel personasModel)
         {
-            if (id != personasModel.PersonaID)
+            var persona = await (from p in _context.Personas
+                                       join c in _context.Clientes
+                                       on p.PersonaID equals c.PersonaID
+                                       where p.PersonaID == id
+                                       select p).FirstOrDefaultAsync();
+
+            if (persona == null)
             {
-                return BadRequest();
+                return NotFound();
             }
 
-            _context.Entry(personasModel).State = EntityState.Modified;
+            if (personasModel.Nombre != null)
+            {
+                persona.Nombre = personasModel.Nombre;
+            }
+
+            if (personasModel.Apellidos != null)
+            {
+                persona.Apellidos = personasModel.Apellidos;
+            }
+
+            if (personasModel.CorreoElectronico != null)
+            {
+                persona.CorreoElectronico = personasModel.CorreoElectronico;
+            }
+
 
             try
             {
